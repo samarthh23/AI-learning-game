@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Learning Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .game-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            gap: 2px;
+            margin: 20px 0;
+            justify-content: center;
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+        .empty { background: #f0f0f0; }
+        .player { background: #4CAF50; color: white; }
+        .ai { background: #FF5722; color: white; }
+        .gold { background: #FFD700; color: #333; }
+        .silver { background: #C0C0C0; color: #333; }
+        .trap { background: #8B0000; color: white; }
+        .obstacle { background: #333; }
+        
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        button {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            margin: 5px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            transition: width 0.3s ease;
+        }
+        .game-status {
+            text-align: center;
+            margin: 15px 0;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .game-over {
+            color: #FFD700;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1 style="text-align: center; margin-bottom: 30px;">🎮 AI Learning Game</h1>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Player Score</h3>
+                <div id="playerScore">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>AI Score</h3>
+                <div id="aiScore">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Games Played</h3>
+                <div id="gamesPlayed">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>AI Learning</h3>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="learningProgress"></div>
+                </div>
+                <div id="learningLevel">Beginner</div>
+            </div>
+        </div>
+
+        <div class="game-status" id="gameStatus">Game in Progress - Moves: <span id="moveCounter">0</span></div>
+
+        <div class="board" id="gameBoard"></div>
+
+        <div class="controls">
+            <button onclick="move('up')">↑ Up</button><br>
+            <button onclick="move('left')">← Left</button>
+            <button onclick="move('right')">Right →</button><br>
+            <button onclick="move('down')">↓ Down</button>
+        </div>
+
+        <div class="controls">
+            <button onclick="newGame()">🎮 New Game</button>
+            <button onclick="trainAI()">🧠 Train AI (10 games)</button>
+            <button onclick="autoPlay()">⚡ Auto Play</button>
+            <button onclick="endCurrentGame()" id="endGameBtn">🏁 End Game</button>
+        </div>
+
+        <div class="log" id="gameLog"></div>
+    </div>
+
+    <script>
+        class SimpleGame {
+            constructor() {
+                this.size = 8;
+                this.reset();
+                this.playerData = [];
+                this.aiKnowledge = new Map();
+                this.trainingGames = 0;
+            }
+
+            reset() {
+                this.board = Array(this.size).fill().map(() => Array(this.size).fill(0));
+                this.playerPos = [0, 0];
+                this.aiPos = [this.size-1, this.size-1];
+                this.playerScore = 0;
+                this.aiScore = 0;
+                this.gameOver = false;
+                this.moves = 0;
+                this.maxMoves = 100; // Increased from 50 to 100
+                this.itemsRemaining = 0;
+                this.placeItems();
+                this.render();
+                this.updateGameStatus();
+            }
+
+            placeItems() {
+                // Place rewards and obstacles
+                const items = [
+                    {count: 3, value: 3, type: 'gold'},
+                    {count: 5, value: 2, type: 'silver'},
+                    {count: 4, value: -1, type: 'trap'},
+                    {count: 6, value: -2, type: 'obstacle'}
+                ];
+
+                this.itemsRemaining = 8; // 3 gold + 5 silver
+
+                items.forEach(item => {
+                    for(let i = 0; i < item.count; i++) {
+                        let pos = this.getRandomEmpty();
+                        if(pos) this.board[pos[0]][pos[1]] = item.value;
+                    }
+                });
+
+                this.board[this.playerPos[0]][this.playerPos[1]] = 10; // Player
+                this.board[this.aiPos[0]][this.aiPos[1]] = 20; // AI
+            }
+
+            getRandomEmpty() {
+                let attempts = 50;
+                while(attempts-- > 0) {
+                    let x = Math.floor(Math.random() * this.size);
+                    let y = Math.floor(Math.random() * this.size);
+                    if(this.board[x][y] === 0 && 
+                       !(x === this.playerPos[0] && y === this.playerPos[1]) &&
+                       !(x === this.aiPos[0] && y === this.aiPos[1])) {
+                        return [x, y];
+                    }
+                }
+                return null;
+            }
+
+            move(direction, isPlayer = true) {
+                if(this.gameOver) return false;
+
+                let pos = isPlayer ? this.playerPos : this.aiPos;
+                let newPos = [...pos];
+                
+                switch(direction) {
+                    case 'up': newPos[0]--; break;
+                    case 'down': newPos[0]++; break;
+                    case 'left': newPos[1]--; break;
+                    case 'right': newPos[1]++; break;
+                }
+
+                if(newPos[0] < 0 || newPos[0] >= this.size || 
+                   newPos[1] < 0 || newPos[1] >= this.size ||
+                   this.board[newPos[0]][newPos[1]] === -2) {
+                    return false;
+                }
+
+                // Clear old position
+                this.board[pos[0]][pos[1]] = 0;
+                
+                // Handle collisions
+                let reward = 0;
+                let cellValue = this.board[newPos[0]][newPos[1]];
+                
+                if(cellValue === 3) {
+                    reward = 5; // Gold
+                    this.itemsRemaining--;
+                } else if(cellValue === 2) {
+                    reward = 3; // Silver
+                    this.itemsRemaining--;
+                } else if(cellValue === -1) {
+                    reward = -2; // Trap
+                }
+
+                // Update position and score
+                if(isPlayer) {
+                    this.playerPos = newPos;
+                    this.playerScore += reward;
+                    this.board[newPos[0]][newPos[1]] = 10;
+                    this.recordPlayerMove(direction, reward);
+                } else {
+                    this.aiPos = newPos;
+                    this.aiScore += reward;
+                    this.board[newPos[0]][newPos[1]] = 20;
+                }
+
+                this.moves++;
+                
+                // Check for game end conditions
+                if(this.itemsRemaining <= 0) {
+                    this.gameOver = true;
+                    this.log('All valuable items collected! Game Over.');
+                } else if(this.moves >= this.maxMoves) {
+                    this.gameOver = true;
+                    this.log('Move limit reached! Game Over.');
+                }
+
+                this.render();
+                this.updateGameStatus();
+                return true;
+            }
+
+            recordPlayerMove(direction, reward) {
+                this.playerData.push({
+                    position: [...this.playerPos],
+                    action: direction,
+                    reward: reward,
+                    gameState: this.getGameState()
+                });
+            }
+
+            getGameState() {
+                return {
+                    playerPos: [...this.playerPos],
+                    aiPos: [...this.aiPos],
+                    nearbyRewards: this.getNearbyRewards(),
+                    playerScore: this.playerScore,
+                    aiScore: this.aiScore
+                };
+            }
+
+            getNearbyRewards() {
+                let rewards = [];
+                for(let dx = -2; dx <= 2; dx++) {
+                    for(let dy = -2; dy <= 2; dy++) {
+                        let x = this.playerPos[0] + dx;
+                        let y = this.playerPos[1] + dy;
+                        if(x >= 0 && x < this.size && y >= 0 && y < this.size) {
+                            if(this.board[x][y] > 0 && this.board[x][y] < 10) {
+                                rewards.push({x, y, value: this.board[x][y]});
+                            }
+                        }
+                    }
+                }
+                return rewards;
+            }
+
+            getValidMoves(pos) {
+                let moves = [];
+                let directions = [
+                    {dir: 'up', dx: -1, dy: 0},
+                    {dir: 'down', dx: 1, dy: 0},
+                    {dir: 'left', dx: 0, dy: -1},
+                    {dir: 'right', dx: 0, dy: 1}
+                ];
+
+                directions.forEach(({dir, dx, dy}) => {
+                    let newX = pos[0] + dx;
+                    let newY = pos[1] + dy;
+                    if(newX >= 0 && newX < this.size && 
+                       newY >= 0 && newY < this.size &&
+                       this.board[newX][newY] !== -2) {
+                        moves.push(dir);
+                    }
+                });
+
+                return moves;
+            }
+
+            predictPlayerMove() {
+                if(this.playerData.length < 3) return this.getRandomMove();
+
+                // Simple pattern recognition
+                let recentMoves = this.playerData.slice(-5);
+                let patterns = {};
+
+                recentMoves.forEach(move => {
+                    let key = `${move.position[0]},${move.position[1]}`;
+                    if(!patterns[key]) patterns[key] = {};
+                    if(!patterns[key][move.action]) patterns[key][move.action] = 0;
+                    patterns[key][move.action]++;
+                });
+
+                let currentKey = `${this.playerPos[0]},${this.playerPos[1]}`;
+                if(patterns[currentKey]) {
+                    let bestAction = Object.keys(patterns[currentKey])
+                        .reduce((a, b) => patterns[currentKey][a] > patterns[currentKey][b] ? a : b);
+                    return bestAction;
+                }
+
+                return this.getRandomMove();
+            }
+
+            getRandomMove() {
+                let moves = ['up', 'down', 'left', 'right'];
+                return moves[Math.floor(Math.random() * moves.length)];
+            }
+
+            makeAIMove() {
+                if(this.gameOver) return;
+
+                let validMoves = this.getValidMoves(this.aiPos);
+                if(validMoves.length === 0) return;
+
+                let bestMove = this.chooseBestAIMove(validMoves);
+                this.move(bestMove, false);
+
+                // Learn from this move
+                this.updateAIKnowledge(bestMove);
+            }
+
+            chooseBestAIMove(validMoves) {
+                if(this.trainingGames < 5) {
+                    // Random exploration phase
+                    return validMoves[Math.floor(Math.random() * validMoves.length)];
+                }
+
+                let bestMove = validMoves[0];
+                let bestScore = -Infinity;
+
+                validMoves.forEach(move => {
+                    let score = this.evaluateMove(move);
+                    if(score > bestScore) {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+                });
+
+                return bestMove;
+            }
+
+            evaluateMove(direction) {
+                let newPos = [...this.aiPos];
+                switch(direction) {
+                    case 'up': newPos[0]--; break;
+                    case 'down': newPos[0]++; break;
+                    case 'left': newPos[1]--; break;
+                    case 'right': newPos[1]++; break;
+                }
+
+                let score = 0;
+                
+                // Reward for collecting items
+                let cellValue = this.board[newPos[0]][newPos[1]];
+                if(cellValue === 3) score += 10; // Gold
+                else if(cellValue === 2) score += 6; // Silver
+                else if(cellValue === -1) score -= 5; // Trap
+
+                // Strategy: stay close to high-value items
+                let nearbyRewards = 0;
+                for(let dx = -1; dx <= 1; dx++) {
+                    for(let dy = -1; dy <= 1; dy++) {
+                        let x = newPos[0] + dx;
+                        let y = newPos[1] + dy;
+                        if(x >= 0 && x < this.size && y >= 0 && y < this.size) {
+                            if(this.board[x][y] === 3) nearbyRewards += 3;
+                            else if(this.board[x][y] === 2) nearbyRewards += 1;
+                        }
+                    }
+                }
+                score += nearbyRewards;
+
+                // Predict player behavior and compete
+                let predictedPlayerMove = this.predictPlayerMove();
+                let playerNextPos = [...this.playerPos];
+                switch(predictedPlayerMove) {
+                    case 'up': playerNextPos[0]--; break;
+                    case 'down': playerNextPos[0]++; break;
+                    case 'left': playerNextPos[1]--; break;
+                    case 'right': playerNextPos[1]++; break;
+                }
+
+                // Compete for the same rewards
+                let distance = Math.abs(newPos[0] - playerNextPos[0]) + Math.abs(newPos[1] - playerNextPos[1]);
+                if(distance < 3) score += 2; // Bonus for staying competitive
+
+                return score;
+            }
+
+            updateAIKnowledge(move) {
+                let state = JSON.stringify({
+                    aiPos: this.aiPos,
+                    playerPos: this.playerPos,
+                    nearbyRewards: this.getNearbyRewards().length
+                });
+
+                if(!this.aiKnowledge.has(state)) {
+                    this.aiKnowledge.set(state, {});
+                }
+
+                let stateData = this.aiKnowledge.get(state);
+                if(!stateData[move]) stateData[move] = {count: 0, reward: 0};
+                
+                stateData[move].count++;
+                stateData[move].reward += (this.aiScore > this.playerScore ? 1 : -1);
+            }
+
+            updateGameStatus() {
+                let statusElement = document.getElementById('gameStatus');
+                let moveCounter = document.getElementById('moveCounter');
+                
+                moveCounter.textContent = this.moves;
+                
+                if(this.gameOver) {
+                    let winner = this.playerScore > this.aiScore ? 'Player Wins!' : 
+                                this.aiScore > this.playerScore ? 'AI Wins!' : 'It\'s a Tie!';
+                    statusElement.innerHTML = `<span class="game-over">Game Over - ${winner}</span>`;
+                } else {
+                    statusElement.innerHTML = `Game in Progress - Moves: <span id="moveCounter">${this.moves}</span>/${this.maxMoves} - Items Left: ${this.itemsRemaining}`;
+                }
+            }
+
+            render() {
+                let board = document.getElementById('gameBoard');
+                board.innerHTML = '';
+
+                for(let i = 0; i < this.size; i++) {
+                    for(let j = 0; j < this.size; j++) {
+                        let cell = document.createElement('div');
+                        cell.className = 'cell';
+                        
+                        let value = this.board[i][j];
+                        if(value === 10) {
+                            cell.className += ' player';
+                            cell.textContent = 'P';
+                        } else if(value === 20) {
+                            cell.className += ' ai';
+                            cell.textContent = 'AI';
+                        } else if(value === 3) {
+                            cell.className += ' gold';
+                            cell.textContent = 'G';
+                        } else if(value === 2) {
+                            cell.className += ' silver';
+                            cell.textContent = 'S';
+                        } else if(value === -1) {
+                            cell.className += ' trap';
+                            cell.textContent = 'T';
+                        } else if(value === -2) {
+                            cell.className += ' obstacle';
+                            cell.textContent = '■';
+                        } else {
+                            cell.className += ' empty';
+                        }
+
+                        board.appendChild(cell);
+                    }
+                }
+
+                // Update stats
+                document.getElementById('playerScore').textContent = this.playerScore;
+                document.getElementById('aiScore').textContent = this.aiScore;
+                document.getElementById('gamesPlayed').textContent = this.trainingGames;
+                
+                let progress = Math.min(this.trainingGames * 10, 100);
+                document.getElementById('learningProgress').style.width = progress + '%';
+                
+                let levels = ['Beginner', 'Learning', 'Intermediate', 'Advanced', 'Expert'];
+                let level = Math.min(Math.floor(this.trainingGames / 2), levels.length - 1);
+                document.getElementById('learningLevel').textContent = levels[level];
+            }
+
+            log(message) {
+                let logDiv = document.getElementById('gameLog');
+                logDiv.innerHTML += message + '\n';
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        }
+
+        let game = new SimpleGame();
+
+        function move(direction) {
+            if(game.move(direction, true)) {
+                game.log(`Player moved ${direction} (Score: ${game.playerScore})`);
+                
+                setTimeout(() => {
+                    game.makeAIMove();
+                    if(!game.gameOver) {
+                        game.log(`AI moved (Score: ${game.aiScore})`);
+                    } else {
+                        endGame();
+                    }
+                }, 500);
+            }
+        }
+
+        function newGame() {
+            game.reset();
+            game.log('New game started!');
+        }
+
+        function endCurrentGame() {
+            game.gameOver = true;
+            game.updateGameStatus();
+            endGame();
+        }
+
+        function trainAI() {
+            game.log('Training AI...');
+            let originalPlayer = [...game.playerPos];
+            
+            for(let i = 0; i < 10; i++) {
+                game.reset();
+                
+                // Simulate player behavior
+                while(!game.gameOver && game.moves < game.maxMoves) {
+                    // Player move
+                    let validMoves = game.getValidMoves(game.playerPos);
+                    if(validMoves.length > 0) {
+                        let playerMove = validMoves[Math.floor(Math.random() * validMoves.length)];
+                        game.move(playerMove, true);
+                    }
+                    
+                    // AI move
+                    if(!game.gameOver) {
+                        game.makeAIMove();
+                    }
+                }
+                
+                game.trainingGames++;
+                game.log(`Training game ${i+1}: Player ${game.playerScore}, AI ${game.aiScore}`);
+            }
+            
+            game.reset();
+            game.log('Training complete! AI is now smarter.');
+        }
+
+        function autoPlay() {
+            if(game.gameOver) return;
+            
+            let validMoves = game.getValidMoves(game.playerPos);
+            if(validMoves.length > 0) {
+                let move = validMoves[Math.floor(Math.random() * validMoves.length)];
+                game.move(move, true);
+                
+                setTimeout(() => {
+                    game.makeAIMove();
+                    if(!game.gameOver) {
+                        setTimeout(autoPlay, 1000);
+                    } else {
+                        endGame();
+                    }
+                }, 500);
+            }
+        }
+
+        function endGame() {
+            let winner = game.playerScore > game.aiScore ? 'Player' : 
+                        game.aiScore > game.playerScore ? 'AI' : 'Tie';
+            game.log(`Game Over! Winner: ${winner}`);
+            game.log(`Final Scores - Player: ${game.playerScore}, AI: ${game.aiScore}`);
+        }
+
+        // Initialize
+        game.log('Welcome to AI Learning Game!');
+        game.log('Use arrow buttons to move. Collect Gold (G) and Silver (S), avoid Traps (T)!');
+        game.log('Game ends when all valuable items are collected or move limit is reached.');
+    </script>
+</body>
+</html>
